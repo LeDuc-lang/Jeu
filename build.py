@@ -1,58 +1,79 @@
+import base64
 import os
-import shutil
+import zipfile
 
-from pyxel.cli import *
-from pyxel.cli import _complete_extension, _check_file_exists, _check_dir_exists, _check_file_under_dir, _files_in_dir
+import pyxel
+from pyxel.cli import _complete_extension, _check_file_exists, _check_dir_exists, _check_file_under_dir
+
+EXCLUDED_FILES = {"README.md", "build.py", "requirements.txt"}
+EXCLUDED_DIRS = {"__pycache__", "builds", ".git", ".idea"}
 
 
-def _make_metadata_comment(startup_script_file):
-    METADATA_FIELDS = ["title", "author", "desc", "site", "license", "version"]
-    metadata = {}
-    metadata_pattern = re.compile(r"#\s*(.+?)\s*:\s*(.+)")
-    with open(startup_script_file, "r", encoding="utf8") as f:
-        for line in f:
-            match = metadata_pattern.match(line)
-            if match:
-                key, value = match.groups()
-                key = key.strip().lower()
-                if key in METADATA_FIELDS:
-                    metadata[key] = value.strip()
-    if not metadata:
-        return ""
-    metadata_comment = ""
-    max_key_len = max(len(key) for key in metadata)
-    max_value_len = max(len(value) for _, value in metadata.items())
-    border = "-" * min((max_key_len + max_value_len + 3), 80)
-    metadata_comment = border + "\n"
-    for key in METADATA_FIELDS:
-        if key in metadata:
-            value = metadata[key]
-            metadata_comment += f"{key.ljust(max_key_len)} : {value}\n"
-    metadata_comment += border
-    return metadata_comment
+def package_pyxel_app(app_name, app_dir, startup_script_file, output_dir="builds"):
+    """Génère un fichier .pyxapp contenant tout le projet, en excluant seulement les fichiers inutiles."""
+    startup_script_file = _complete_extension(startup_script_file, "package", ".py")
+    _check_dir_exists(app_dir)
+    _check_file_exists(startup_script_file)
+    _check_file_under_dir(startup_script_file, app_dir)
 
-def create_html_from_pyxel_app(pyxel_app_file):
-    pyxel_app_file = _complete_extension(
-        pyxel_app_file, "app2html", pyxel.APP_FILE_EXTENSION
-    )
-    _check_file_exists(pyxel_app_file)
-    base64_string = ""
+    # Vérifier et créer le dossier de sortie
+    os.makedirs(output_dir, exist_ok=True)
+
+    app_dir = os.path.abspath(app_dir)
+    pyxel_app_file = os.path.join(output_dir, f"{app_name}{pyxel.APP_FILE_EXTENSION}")
+
+    with zipfile.ZipFile(pyxel_app_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(app_dir):
+            # Exclure les dossiers inutiles
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+
+            for file in files:
+                if file in EXCLUDED_FILES or file.endswith(".pyc"):
+                    continue  # On ignore ces fichiers
+
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, app_dir)  # Chemin relatif pour éviter d'écraser tout
+
+                zf.write(file_path, arcname)
+                print(f"✅ Ajouté au zip: '{arcname}'")
+
+    print(f'✅ Fichier Pyxel packagé: {pyxel_app_file}')
+    return pyxel_app_file  # Retourne le chemin du fichier généré
+
+
+def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
+    """Génère un fichier HTML qui exécute le jeu Pyxel dans WASM."""
+    pyxel_app_file = _complete_extension(pyxel_app_file, "app2html", pyxel.APP_FILE_EXTENSION)
+
+    if not os.path.exists(pyxel_app_file):
+        raise FileNotFoundError(f"🚨 ERREUR: Le fichier '{pyxel_app_file}' n'existe pas !")
+
     with open(pyxel_app_file, "rb") as f:
         base64_string = base64.b64encode(f.read()).decode()
+
     pyxel_app_name = os.path.splitext(os.path.basename(pyxel_app_file))[0]
-    with open(f'builds/{pyxel_app_name}.html', "w") as f:
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    dependencies = ["numpy", "matplotlib", "scipy"]
+    packages_str = ",".join(dependencies)
+
+    html_file = os.path.join(output_dir, f"{pyxel_app_name}.html")
+
+    with open(html_file, "w") as f:
         f.write(
             "<!DOCTYPE html>\n"
-            '<script src="https://cdn.jsdelivr.net/gh/kitao/pyxel/wasm/pyxel.js">'
-            "</script>\n"
+            '<script src="https://cdn.jsdelivr.net/gh/kitao/pyxel/wasm/pyxel.js"></script>\n'
             "<script>\n"
             f'launchPyxel({{ command: "play", name: "{pyxel_app_name}{pyxel.APP_FILE_EXTENSION}", '
-            f'gamepad: "enabled", packages: "numpy", base64: "{base64_string}" }});\n'
+            f'gamepad: "enabled", packages: "{packages_str}", base64: "{base64_string}" }});\n'
             "</script>\n"
         )
-    print(f'pyxel app "{pyxel_app_name}" created.\n pyxel app file: "{pyxel_app_file}"')
+
+    print(f'✅ HTML généré: {html_file}')
 
 
-package_pyxel_app(os.curdir, "main.py")
-shutil.move(os.curdir + "/NDC 2024.pyxapp", os.curdir + "/builds/NDC 2024.pyxapp")
-create_html_from_pyxel_app(os.curdir + '/builds/NDC 2024.pyxapp')
+# Exécution du script
+app_name = "space_settler"
+pyxapp_path = package_pyxel_app(app_name, os.curdir, "main.py", "builds")
+create_html_from_pyxel_app(pyxapp_path, "builds")
