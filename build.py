@@ -4,17 +4,20 @@ import zipfile
 
 import pyxel
 from pyxel.cli import _complete_extension, _check_file_exists, _check_dir_exists, _check_file_under_dir, \
-    package_pyxel_app, create_html_from_pyxel_app, _files_in_dir
+    _files_in_dir
 
-# EXCLUDED_FILES = {"README.md", "build.py", "requirements.txt"}
-# EXCLUDED_DIRS = {"__pycache__", "builds", ".git", ".idea"}
+EXCLUDED_FILES = {"README.md", "build.py", "requirements.txt"}
+EXCLUDED_DIRS = {"__pycache__", "builds", ".git", ".idea"}
 
 dependencies = ["numpy", "matplotlib", "scipy"]
 
 packages_str = f'"{','.join(dependencies)}"'
+
+
 # app_name = "space_settler"
 
 def package_pyxel_app(app_dir, startup_script_file):
+    """Génère un pyxel package"""
     startup_script_file = _complete_extension(startup_script_file, "package", ".py")
     _check_dir_exists(app_dir)
     _check_file_exists(startup_script_file)
@@ -27,22 +30,22 @@ def package_pyxel_app(app_dir, startup_script_file):
     pyxel_app_file = os.path.basename(app_dir) + pyxel.APP_FILE_EXTENSION
     app_parent_dir = os.path.dirname(app_dir)
     with zipfile.ZipFile(
-        f'builds/{pyxel_app_file}',
-        "w",
-        compression=zipfile.ZIP_DEFLATED,
+            f'builds/{pyxel_app_file}',
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
     ) as zf:
         files = [setting_file] + _files_in_dir(app_dir)
-        for file in files:
-            print(f'os.path.basename(file) => {os.path.basename(file)}')
-            print(f'file path => {file}')
-            if os.path.basename(file) == pyxel_app_file or "/__pycache__/" in file:
+        for file_path in files:
+            if os.path.basename(file_path) == pyxel_app_file or any(file_name in file_path for file_name in EXCLUDED_FILES) or any(
+                    dir_name in file_path for dir_name in EXCLUDED_DIRS):
                 continue
-            arcname = os.path.relpath(file, app_parent_dir)
-            zf.write(file, arcname)
+            arcname = os.path.relpath(file_path, app_parent_dir)
+            zf.write(file_path, arcname)
             print(f"added '{arcname}'")
     os.remove(setting_file)
 
     return f'builds/{pyxel_app_file}'
+
 
 def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
     """Génère un fichier HTML qui exécute le jeu Pyxel dans WASM."""
@@ -73,7 +76,7 @@ def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
     print(f'✅ HTML généré: {html_file}')
 
 
-#Avex les methodes par défaut
+# Avex les methodes par défaut
 # package_pyxel_app(os.curdir, "main.py")
 # create_html_from_pyxel_app(os.curdir+"/spacesettler clone.pyxapp")
 
