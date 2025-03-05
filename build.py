@@ -3,43 +3,46 @@ import os
 import zipfile
 
 import pyxel
-from pyxel.cli import _complete_extension, _check_file_exists, _check_dir_exists, _check_file_under_dir
+from pyxel.cli import _complete_extension, _check_file_exists, _check_dir_exists, _check_file_under_dir, \
+    package_pyxel_app, create_html_from_pyxel_app, _files_in_dir
 
-EXCLUDED_FILES = {"README.md", "build.py", "requirements.txt"}
-EXCLUDED_DIRS = {"__pycache__", "builds", ".git", ".idea"}
+# EXCLUDED_FILES = {"README.md", "build.py", "requirements.txt"}
+# EXCLUDED_DIRS = {"__pycache__", "builds", ".git", ".idea"}
 
+dependencies = ["numpy", "matplotlib", "scipy"]
 
-def package_pyxel_app(app_name, app_dir, startup_script_file, output_dir="builds"):
-    """Génère un fichier .pyxapp contenant tout le projet, en excluant seulement les fichiers inutiles."""
+packages_str = f'"{','.join(dependencies)}"'
+# app_name = "space_settler"
+
+def package_pyxel_app(app_dir, startup_script_file):
     startup_script_file = _complete_extension(startup_script_file, "package", ".py")
     _check_dir_exists(app_dir)
     _check_file_exists(startup_script_file)
     _check_file_under_dir(startup_script_file, app_dir)
 
-    # Vérifier et créer le dossier de sortie
-    os.makedirs(output_dir, exist_ok=True)
-
     app_dir = os.path.abspath(app_dir)
-    pyxel_app_file = os.path.join(output_dir, f"{app_name}{pyxel.APP_FILE_EXTENSION}")
+    setting_file = os.path.join(app_dir, pyxel.APP_STARTUP_SCRIPT_FILE)
+    with open(setting_file, "w") as f:
+        f.write(os.path.relpath(startup_script_file, app_dir))
+    pyxel_app_file = os.path.basename(app_dir) + pyxel.APP_FILE_EXTENSION
+    app_parent_dir = os.path.dirname(app_dir)
+    with zipfile.ZipFile(
+        f'builds/{pyxel_app_file}',
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as zf:
+        files = [setting_file] + _files_in_dir(app_dir)
+        for file in files:
+            print(f'os.path.basename(file) => {os.path.basename(file)}')
+            print(f'file path => {file}')
+            if os.path.basename(file) == pyxel_app_file or "/__pycache__/" in file:
+                continue
+            arcname = os.path.relpath(file, app_parent_dir)
+            zf.write(file, arcname)
+            print(f"added '{arcname}'")
+    os.remove(setting_file)
 
-    with zipfile.ZipFile(pyxel_app_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk(app_dir):
-            # Exclure les dossiers inutiles
-            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
-
-            for file in files:
-                if file in EXCLUDED_FILES or file.endswith(".pyc"):
-                    continue  # On ignore ces fichiers
-
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, app_dir)  # Chemin relatif pour éviter d'écraser tout
-
-                zf.write(file_path, arcname)
-                print(f"✅ Ajouté au zip: '{arcname}'")
-
-    print(f'✅ Fichier Pyxel packagé: {pyxel_app_file}')
-    return pyxel_app_file  # Retourne le chemin du fichier généré
-
+    return f'builds/{pyxel_app_file}'
 
 def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
     """Génère un fichier HTML qui exécute le jeu Pyxel dans WASM."""
@@ -55,9 +58,6 @@ def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
 
     os.makedirs(output_dir, exist_ok=True)
 
-    dependencies = ["numpy", "matplotlib", "scipy"]
-    packages_str = ",".join(dependencies)
-
     html_file = os.path.join(output_dir, f"{pyxel_app_name}.html")
 
     with open(html_file, "w") as f:
@@ -66,14 +66,18 @@ def create_html_from_pyxel_app(pyxel_app_file, output_dir="builds"):
             '<script src="https://cdn.jsdelivr.net/gh/kitao/pyxel/wasm/pyxel.js"></script>\n'
             "<script>\n"
             f'launchPyxel({{ command: "play", name: "{pyxel_app_name}{pyxel.APP_FILE_EXTENSION}", '
-            f'gamepad: "enabled", packages: "{packages_str}", base64: "{base64_string}" }});\n'
+            f'gamepad: "enabled", packages: {packages_str}, base64: "{base64_string}" }});\n'
             "</script>\n"
         )
 
     print(f'✅ HTML généré: {html_file}')
 
 
+#Avex les methodes par défaut
+# package_pyxel_app(os.curdir, "main.py")
+# create_html_from_pyxel_app(os.curdir+"/spacesettler clone.pyxapp")
+
 # Exécution du script
-app_name = "space_settler"
-pyxapp_path = package_pyxel_app(app_name, os.curdir, "main.py", "builds")
+pyxapp_path = package_pyxel_app(os.curdir, "main.py")
+print(pyxapp_path)
 create_html_from_pyxel_app(pyxapp_path, "builds")
