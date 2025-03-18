@@ -6,7 +6,7 @@ from utils.timer import Timer
 
 class Projectile(Entity):
     def __init__(
-            self, x: int, y: int, radius: int, angle: tuple | Point, speed, damage, dispawn_delay=60
+            self, x: int, y: int, radius: int, angle: tuple | Point, speed, damage, dispawn_delay=100
     ) -> None:
         super().__init__(x, y, speed)
         self._radius = radius

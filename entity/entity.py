@@ -91,8 +91,8 @@ class Entity(Point):
     def prevent_overlap(self, vector, other):
         """
         Calcule un vecteur ajusté pour éviter le chevauchement.
-        - vector : un tuple (vx, vy) représentant le déplacement initial.
-        - other : une autre entité.
+        -vector : un tuple (vx, vy) représentant le déplacement initial.
+        -other : une autre entité.
         Retourne un vecteur ajusté (dx, dy).
         """
         # Simule les nouvelles positions après déplacement
